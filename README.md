@@ -5,7 +5,7 @@ Some tools for testing USB devices
 
 This code was first released at T2 Infosec 2012: http://www.t2.fi/2012/
 
-simple_ctrl_fuzzer.py: simple fuzzer for USB control transfers
+control_transfer_fuzzer.py: simple fuzzer for USB control transfers
 
 USBFuzz: python modules for building USB fuzzers
 
