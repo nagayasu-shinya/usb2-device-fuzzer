@@ -52,22 +52,28 @@ def test_ctrl_transfer(device, bm_request_type, b_request, w_value, w_index):
 
 
 def main():
-    if len(sys.argv) < 2:
-        print "Usage: %s VID:PID [start_b_request [start_w_value_hi [start_w_value_lo]]]" % sys.argv[0]
-        sys.exit(1)
+    import argparse
 
-    vid_pid = sys.argv[1].split(':')
+    parser = argparse.ArgumentParser(description='USB control transfer fuzzer')
+    parser.add_argument('vid_pid', metavar='VID:PID',
+                        help='Target USB device vendor:product IDs in hex (e.g. 16c0:05dc)')
+    parser.add_argument('--start-b-request',  dest='start_b_request',
+                        type=lambda x: int(x, 16), default=0x00, metavar='HEX',
+                        help='bRequest value to start fuzzing from (default: 0x00)')
+    parser.add_argument('--start-w-value-hi', dest='start_w_value_hi',
+                        type=lambda x: int(x, 16), default=0x00, metavar='HEX',
+                        help='High byte of wValue to start from (default: 0x00)')
+    parser.add_argument('--start-w-value-lo', dest='start_w_value_lo',
+                        type=lambda x: int(x, 16), default=0x00, metavar='HEX',
+                        help='Low byte of wValue to start from (default: 0x00)')
+    args = parser.parse_args()
+
+    vid_pid = args.vid_pid.split(':')
     device = usb.core.find(idVendor=int(vid_pid[0], 16), idProduct=int(vid_pid[1], 16))
 
-    start_b_request = 0
-    start_w_value_hi = 0
-    start_w_value_lo = 0
-    if len(sys.argv) > 2:
-        start_b_request = int(sys.argv[2], 16)
-    if len(sys.argv) > 3:
-        start_w_value_hi = int(sys.argv[3], 16)
-    if len(sys.argv) > 4:
-        start_w_value_lo = int(sys.argv[4], 16)
+    start_b_request  = args.start_b_request
+    start_w_value_hi = args.start_w_value_hi
+    start_w_value_lo = args.start_w_value_lo
 
     for b_request in range(start_b_request, 0x100):
         for w_value_hi in range(start_w_value_hi, 0x10):
