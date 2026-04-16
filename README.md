@@ -5,23 +5,31 @@ Some tools for testing USB devices
 
 This code was first released at T2 Infosec 2012: http://www.t2.fi/2012/
 
-control_transfer_fuzzer.py: simple fuzzer for USB control transfers
+fuzzers/: fuzzing scripts (run as `python fuzzers/<script>.py VID:PID`)
 
-USBFuzz: python modules for building USB fuzzers
+  fuzzers/control_transfer_fuzzer.py: exhaustive fuzzer for USB control transfers (EP0); no library dependency
 
-USBFuzz.Exceptions: common exception definitions for the USBFuzz modules
+  fuzzers/ccid_fuzzer.py: fuzzer for USB CCID (smart card reader) devices
 
-USBFuzz.Device: module to interface with USB devices
+  fuzzers/msc_fuzzer.py: fuzzer for USB Mass Storage Class (Bulk-Only Transport) devices
 
-USBFuzz.MSC: scapy layers and USB device interface class for the USB Bulk-Only Mass Storage Class
+  fuzzers/mtp_fuzzer.py: fuzzer for USB MTP (Media Transfer Protocol) devices
 
-USBFuzz.SCSI: scapy layers for SCSI primary and bulk commands, used by USBFuzz.MSC
+  fuzzers/qcdm_fuzzer.py: fuzzer for Qualcomm baseband DIAG protocol devices
 
-USBFuzz.CCID: scapy layers and USB device interface class for the USB Integrated Circuit Cards Interface Device Class
+usbfuzz/: Python package for building USB fuzzers
 
-USBFuzz.MTP: scapy layers and USB device interface class for the USB Media Tranfer Protocol (based on Picture Transfer Protocol)
+  usbfuzz.exceptions: common exception definitions (USBException, USBStalled, USBTimeout)
 
-USBFuzz.QCDM: scapy layers and USB device interface class for the Qualcomm baseband DIAG protocol
+  usbfuzz.device: base classes for USB device access (USBDevice, BulkPipe)
 
-examples: examples of simple fuzzers built using the USBFuzz modules
+  usbfuzz.msc: scapy layers and BOMSDevice class for USB Bulk-Only Mass Storage Class
+
+  usbfuzz.scsi: scapy layers for SCSI primary and bulk commands, used by usbfuzz.msc
+
+  usbfuzz.ccid: scapy layers and CCIDDevice class for USB Integrated Circuit Cards Interface Device Class
+
+  usbfuzz.mtp: scapy layers and MTPDevice class for USB Media Transfer Protocol (based on PTP)
+
+  usbfuzz.qcdm: scapy layers and QCDMDevice class for Qualcomm baseband DIAG protocol
 

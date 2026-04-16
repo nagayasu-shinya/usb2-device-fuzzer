@@ -2,8 +2,8 @@
 
 import sys
 import time
-import usb.core
 import binascii
+import usb.core
 
 
 def is_alive(device):
@@ -89,4 +89,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
