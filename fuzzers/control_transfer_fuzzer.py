@@ -118,13 +118,25 @@ def iter_params(args):
     for b_request in range(args.start_b_request, args.end_b_request + 1):
         for w_value in range(args.start_w_value, args.end_w_value + 1):
             for w_index in range(args.start_w_index, args.end_w_index + 1):
-                # Skip SET_FEATURE(TEST_MODE) entirely (bRequest=3, wValue low byte=2).
-                # Entering test mode renders the device unusable until
-                # a power cycle (USB 2.0 spec Section 9.4.9, Table 9-7).
-                if b_request == 3 and (w_value & 0x00FF) == 2:
-                    continue
                 for req_type in range(0x00, 0x04):       # bmRequestType.Type
                     for req_recipient in range(0x00, 0x04):  # bmRequestType.Recipient
+                        bm_request_type = (req_type << 5) | req_recipient
+                        # Skip SET_FEATURE(TEST_MODE) with conditions that actually
+                        # transition the device into test mode, requiring a power cycle
+                        # to recover (USB 2.0 spec Section 9.4.9, Table 9-7).
+                        # Triggering conditions (all must be true):
+                        #   - bmRequestType == 0x00 (Standard, OUT, Device recipient)
+                        #   - bRequest == 3 (SET_FEATURE)
+                        #   - wValue == 0x0002 (TEST_MODE feature selector)
+                        #   - wIndex low byte == 0x00 (required by spec)
+                        #   - wIndex high byte in 0x01-0x05 or 0xC0-0xFF (valid test selector)
+                        if (bm_request_type == 0x00
+                                and b_request == 3
+                                and w_value == 0x0002
+                                and (w_index & 0x00FF) == 0x00
+                                and ((0x01 <= (w_index >> 8) <= 0x05)
+                                     or (0xC0 <= (w_index >> 8) <= 0xFF))):
+                            continue
                         yield (
                             (req_type << 5) | req_recipient,
                             b_request,
