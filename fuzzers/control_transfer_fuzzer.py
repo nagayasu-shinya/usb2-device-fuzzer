@@ -119,7 +119,7 @@ def iter_params(args):
         for w_value in range(args.start_w_value, args.end_w_value + 1):
             for w_index in range(args.start_w_index, args.end_w_index + 1):
                 for req_type in range(0x00, 0x04):       # bmRequestType.Type
-                    for req_recipient in range(0x00, 0x04):  # bmRequestType.Recipient
+                    for req_recipient in range(0x00, 0x20):  # bmRequestType.Recipient (0-3: defined, 4-31: reserved)
                         bm_request_type = (req_type << 5) | req_recipient
                         # Skip SET_FEATURE(TEST_MODE) with conditions that actually
                         # transition the device into test mode, requiring a power cycle
