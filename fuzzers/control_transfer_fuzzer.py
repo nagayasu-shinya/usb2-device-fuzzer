@@ -125,6 +125,9 @@ def main():
     args = parse_args()
     vid_pid = args.vid_pid.split(':')
     device = usb.core.find(idVendor=int(vid_pid[0], 16), idProduct=int(vid_pid[1], 16))
+    if device is None:
+        print "Device %s not found!" % args.vid_pid
+        sys.exit(1)
 
     for bm_request_type, b_request, w_value, w_index in iter_params(args):
         test_ctrl_transfer(device, bm_request_type, b_request, w_value, w_index)
