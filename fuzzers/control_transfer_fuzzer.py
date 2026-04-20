@@ -29,6 +29,7 @@ Usage::
 
 import argparse
 import binascii
+import datetime
 import sys
 import time
 
@@ -62,6 +63,29 @@ FUZZ_SIZES = (
     256,    # uint8_t overflow boundary (0x100)
     65535,  # uint16_t max: maximum wLength value
 )
+
+# ---------------------------------------------------------------------------
+# CSV output helpers
+# ---------------------------------------------------------------------------
+CSV_HEADER = 'timestamp,dir,result,bmRequestType,bRequest,wValue,wIndex,wLength,detail'
+
+
+def _timestamp():
+    """Return an ISO 8601 timestamp with millisecond precision."""
+    return datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%S.') + \
+        '%03d' % (datetime.datetime.now().microsecond // 1000)
+
+
+def _log_transfer(direction, result, bm_rt, b_request, w_value, w_index, w_length, detail=''):
+    """Write one CSV line for a control-transfer result to stdout."""
+    print '%s,%s,%s,0x%02x,0x%02x,0x%04x,0x%04x,%d,%s' % (
+        _timestamp(), direction, result,
+        bm_rt, b_request, w_value, w_index, w_length, detail)
+
+
+def _log_event(event, detail=''):
+    """Write one CSV line for a non-transfer event to stdout."""
+    print '%s,-,%s,-,-,-,-,-,%s' % (_timestamp(), event, detail)
 
 
 def hex_int(value):
@@ -101,23 +125,24 @@ def is_alive(device):
         res = device.ctrl_transfer(DIRECTION_IN, 0, 0, 0, 2)
     except usb.core.USBError as e:
         if e.backend_error_code == LIBUSB_ERROR_NO_DEVICE:
-            print "\nDevice not found!"
+            _log_event('FATAL', 'reason=device_not_found')
             sys.exit()
         if e.backend_error_code == LIBUSB_ERROR_ACCESS:
-            print "\nAccess denied to device!"
+            _log_event('FATAL', 'reason=access_denied')
             sys.exit()
-        print "\nGET_STATUS returned error %i" % e.backend_error_code
+        _log_event('ALIVE_FAIL', 'error_code=%d' % e.backend_error_code)
         return False
 
     if len(res) != 2:
-        print "\nGET_STATUS returned %u bytes: %s" % (len(res), binascii.hexlify(res))
+        _log_event('ALIVE_FAIL', 'unexpected_bytes=%s' % binascii.hexlify(res))
         return False
 
+    _log_event('ALIVE_OK')
     return True
 
 
 def _do_transfer(device, direction_label, bm_request_type, b_request, w_value, w_index, size, fill_byte=0xff):
-    """Issue a single control transfer and log the result.
+    """Issue a single control transfer and log the result as CSV.
 
     Builds the final ``bmRequestType`` byte by setting or clearing the
     direction bit (D7) according to *direction_label*, then performs the
@@ -127,10 +152,9 @@ def _do_transfer(device, direction_label, bm_request_type, b_request, w_value, w
     requests up to *size* bytes from the device).  For OUT transfers a
     buffer of *size* bytes filled with *fill_byte* is sent to the device.
 
-    STALL (``LIBUSB_ERROR_PIPE``) and I/O errors are silently ignored
-    because they are the *expected* response for most invalid requests
-    (USB 2.0 Specification, Section 9.2.7 — Request Error).  Only unexpected error
-    codes are printed.
+    Every result — including STALL (``LIBUSB_ERROR_PIPE``) and I/O
+    errors — is logged as one CSV line so that no transfer goes
+    unrecorded.
 
     Args:
         device: :class:`usb.core.Device` handle.
@@ -143,26 +167,29 @@ def _do_transfer(device, direction_label, bm_request_type, b_request, w_value, w
         fill_byte: Byte value used to fill OUT payloads (default 0xFF).
     """
     is_in = (direction_label == 'IN ')
+    direction = 'IN' if is_in else 'OUT'
     # Set D7 (direction bit) of bmRequestType.
     bm_rt = bm_request_type | DIRECTION_IN if is_in else bm_request_type & ~DIRECTION_IN
-    fmt_args = (bm_rt, b_request, w_value, w_index)
     # IN: pass integer (requested byte count); OUT: pass payload bytes.
     data  = size if is_in else bytearray([fill_byte] * size)
 
     try:
         res = device.ctrl_transfer(bm_rt, b_request, w_value, w_index, data, timeout=250)
         if is_in:
-            print '%s %0.2x %0.2x %0.4x %0.4x data(%u) len(%u):\t%s' % (
-                (direction_label,) + fmt_args + (len(res), size, binascii.hexlify(res)))
+            _log_transfer(direction, 'OK', bm_rt, b_request, w_value, w_index, size,
+                          'data=%s' % binascii.hexlify(res))
         else:
-            print '%s %0.2x %0.2x %0.4x %0.4x res(%u) len(%u)' % (
-                (direction_label,) + fmt_args + (res, size))
+            _log_transfer(direction, 'OK', bm_rt, b_request, w_value, w_index, size,
+                          'bytes_written=%d' % res)
     except usb.core.USBError as e:
-        # STALL and I/O errors are normal for unsupported requests;
-        # only log truly unexpected error codes.
-        if e.backend_error_code not in (LIBUSB_ERROR_PIPE, LIBUSB_ERROR_IO):
-            print '%s %0.2x %0.2x %0.4x %0.4x err(%i) len(%u)' % (
-                (direction_label,) + fmt_args + (e.backend_error_code, size))
+        if e.backend_error_code == LIBUSB_ERROR_PIPE:
+            result = 'STALL'
+        elif e.backend_error_code == LIBUSB_ERROR_IO:
+            result = 'IO_ERROR'
+        else:
+            result = 'ERROR'
+        _log_transfer(direction, result, bm_rt, b_request, w_value, w_index, size,
+                      'error_code=%d' % e.backend_error_code)
 
 
 def test_ctrl_transfer(device, bm_request_type, b_request, w_value, w_index, fill_byte=0xff):
@@ -178,7 +205,7 @@ def test_ctrl_transfer(device, bm_request_type, b_request, w_value, w_index, fil
     and the fuzzer waits for re-enumeration before continuing.
     """
     for size in FUZZ_SIZES:
-        sys.stdout.write('TRY %0.2x %0.2x %0.4x %0.4x len(%0.4u)\r' % (
+        sys.stderr.write('TRY %0.2x %0.2x %0.4x %0.4x len(%0.4u)\r' % (
             bm_request_type, b_request, w_value, w_index, size))
         _do_transfer(device, 'OUT', bm_request_type, b_request, w_value, w_index, size)
         _do_transfer(device, 'IN ', bm_request_type, b_request, w_value, w_index, size)
@@ -187,6 +214,7 @@ def test_ctrl_transfer(device, bm_request_type, b_request, w_value, w_index, fil
         if w_index % 10 == 0:
             if not is_alive(device):
                 device.reset()
+                _log_event('DEVICE_RESET')
                 time.sleep(1)
 
 
@@ -282,9 +310,10 @@ def main():
     vid_pid = args.vid_pid.split(':')
     device = usb.core.find(idVendor=int(vid_pid[0], 16), idProduct=int(vid_pid[1], 16))
     if device is None:
-        print "Device %s not found!" % args.vid_pid
+        sys.stderr.write("Device %s not found!\n" % args.vid_pid)
         sys.exit(1)
 
+    print CSV_HEADER
     for bm_request_type, b_request, w_value, w_index in iter_params(args):
         test_ctrl_transfer(device, bm_request_type, b_request, w_value, w_index, args.fill_byte)
 
