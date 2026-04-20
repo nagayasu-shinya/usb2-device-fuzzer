@@ -24,6 +24,18 @@ def hex_int(value):
     return int(value, 16)
 
 
+def vid_pid_type(value):
+    parts = value.split(':')
+    if len(parts) != 2:
+        raise argparse.ArgumentTypeError("must be VID:PID (e.g. 16c0:05dc)")
+    try:
+        int(parts[0], 16)
+        int(parts[1], 16)
+    except ValueError:
+        raise argparse.ArgumentTypeError("must be VID:PID in hex (e.g. 16c0:05dc)")
+    return value
+
+
 def is_alive(device):
     try:
         res = device.ctrl_transfer(DIRECTION_IN, 0, 0, 0, 2)
@@ -79,7 +91,7 @@ def test_ctrl_transfer(device, bm_request_type, b_request, w_value, w_index):
 
 def parse_args():
     parser = argparse.ArgumentParser(description='USB control transfer fuzzer')
-    parser.add_argument('vid_pid', metavar='VID:PID',
+    parser.add_argument('vid_pid', metavar='VID:PID', type=vid_pid_type,
                         help='Target USB device vendor:product IDs in hex (e.g. 16c0:05dc)')
     parser.add_argument('--start-b-request', dest='start_b_request',
                         type=hex_int, default=0x0000, metavar='HEX',
