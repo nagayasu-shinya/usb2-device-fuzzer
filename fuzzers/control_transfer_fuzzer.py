@@ -106,8 +106,11 @@ def iter_params(args):
     for b_request in range(args.start_b_request, args.end_b_request + 1):
         for w_value in range(args.start_w_value, args.end_w_value + 1):
             for w_index in range(args.start_w_index, args.end_w_index + 1):
-                if b_request == 3 and (w_value & 0x00FF) == 2 and (w_index >> 8) == 0:
-                    continue  # avoid SET_FEATURE TEST_MODE
+                # Skip SET_FEATURE(TEST_MODE) entirely (bRequest=3, wValue low byte=2).
+                # Entering test mode renders the device unusable until
+                # a power cycle (USB 2.0 spec Section 9.4.9, Table 9-7).
+                if b_request == 3 and (w_value & 0x00FF) == 2:
+                    continue
                 for req_type in range(0x00, 0x04):       # bmRequestType.Type
                     for req_recipient in range(0x00, 0x04):  # bmRequestType.Recipient
                         yield (
