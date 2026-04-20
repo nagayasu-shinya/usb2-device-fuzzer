@@ -47,7 +47,7 @@ def is_alive(device):
 def _do_transfer(device, direction_label, bm_request_type, b_request, w_value, w_index, size):
     fmt_args = (bm_request_type, b_request, w_value, w_index)
     is_in = (direction_label == 'IN ')
-    bm_rt = bm_request_type | DIRECTION_IN if is_in else bm_request_type & DIRECTION_IN
+    bm_rt = bm_request_type | DIRECTION_IN if is_in else bm_request_type & ~DIRECTION_IN
     data  = size if is_in else bytearray(b'\xff' * size)
 
     try:
