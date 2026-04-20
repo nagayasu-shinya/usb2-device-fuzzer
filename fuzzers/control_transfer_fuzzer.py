@@ -18,9 +18,10 @@ For every parameter combination, both an IN (device-to-host) and an OUT
 (host-to-device) transfer are attempted so that device behaviour can be
 observed in both data-phase directions.
 
-Periodically a GET_STATUS request (USB 2.0 Specification, Section 9.4.5) is issued
-to verify that the device is still responsive; if not, the device is
-reset before continuing.
+When a transfer returns an I/O error, a GET_STATUS request (USB 2.0
+Specification, Section 9.4.5) is issued to verify that the device is still
+responsive; if not, the device is reset and recovery is confirmed
+before continuing.
 
 Usage::
 
@@ -43,7 +44,7 @@ LIBUSB_ERROR_ACCESS    = -3
 LIBUSB_ERROR_NO_DEVICE = -4
 LIBUSB_ERROR_PIPE      = -9  # STALL (device rejected the request)
 
-# bmRequestType bit 7 — Data transfer direction
+# bmRequestType bit 7 -- Data transfer direction
 # (USB 2.0 Specification, Section 9.3.1, Table 9-2)
 #   D7 = 0: Host-to-device (OUT)
 #   D7 = 1: Device-to-host (IN)
@@ -152,13 +153,17 @@ def _do_transfer(device, direction_label, bm_request_type, b_request, w_value, w
     requests up to *size* bytes from the device).  For OUT transfers a
     buffer of *size* bytes filled with *fill_byte* is sent to the device.
 
-    Every result — including STALL (``LIBUSB_ERROR_PIPE``) and I/O
-    errors — is logged as one CSV line so that no transfer goes
+    Every result -- including STALL (``LIBUSB_ERROR_PIPE``) and I/O
+    errors -- is logged as one CSV line so that no transfer goes
     unrecorded.
+
+    Returns:
+        bool: ``True`` if the transfer succeeded or was STALLed (device
+            is still responsive), ``False`` for I/O or other errors.
 
     Args:
         device: :class:`usb.core.Device` handle.
-        direction_label: ``'IN '`` or ``'OUT'`` — also determines D7.
+        direction_label: ``'IN '`` or ``'OUT'`` -- also determines D7.
         bm_request_type: Base bmRequestType (Type + Recipient bits only).
         b_request: bRequest value  (USB 2.0 Specification, Table 9-4).
         w_value:   wValue field    (USB 2.0 Specification, Section 9.3.3).
@@ -181,6 +186,7 @@ def _do_transfer(device, direction_label, bm_request_type, b_request, w_value, w
         else:
             _log_transfer(direction, 'OK', bm_rt, b_request, w_value, w_index, size,
                           'bytes_written=%d' % res)
+        return True
     except usb.core.USBError as e:
         if e.backend_error_code == LIBUSB_ERROR_PIPE:
             result = 'STALL'
@@ -190,6 +196,18 @@ def _do_transfer(device, direction_label, bm_request_type, b_request, w_value, w
             result = 'ERROR'
         _log_transfer(direction, result, bm_rt, b_request, w_value, w_index, size,
                       'error_code=%d' % e.backend_error_code)
+        return result == 'STALL'
+
+
+def _check_and_reset(device):
+    """If the device is unresponsive, reset it and verify recovery."""
+    if not is_alive(device):
+        device.reset()
+        _log_event('DEVICE_RESET')
+        time.sleep(1)
+        if not is_alive(device):
+            _log_event('FATAL', 'reason=device_not_recovered_after_reset')
+            sys.exit(1)
 
 
 def test_ctrl_transfer(device, bm_request_type, b_request, w_value, w_index, fill_byte=0xff):
@@ -199,23 +217,19 @@ def test_ctrl_transfer(device, bm_request_type, b_request, w_value, w_index, fil
     and an IN transfer are attempted so that device behaviour is observed
     in both data-phase directions (USB 2.0 Specification, Section 9.3.1, D7 bit).
 
-    Every 10th wIndex iteration a liveness check (:func:`is_alive`) is
-    performed.  If the device has become unresponsive — e.g. due to an
-    unhandled request causing a firmware fault — a USB reset is issued
-    and the fuzzer waits for re-enumeration before continuing.
+    After each transfer that returns an I/O error, a liveness check
+    (:func:`is_alive`) is performed.  If the device has become
+    unresponsive -- e.g. due to an unhandled request causing a firmware
+    fault -- a USB reset is issued and recovery is verified before
+    continuing.
     """
     for size in FUZZ_SIZES:
         sys.stderr.write('TRY %0.2x %0.2x %0.4x %0.4x len(%0.4u)\r' % (
             bm_request_type, b_request, w_value, w_index, size))
-        _do_transfer(device, 'OUT', bm_request_type, b_request, w_value, w_index, size)
-        _do_transfer(device, 'IN ', bm_request_type, b_request, w_value, w_index, size)
-
-        # Periodic liveness probe — reset device if it stopped responding.
-        if w_index % 10 == 0:
-            if not is_alive(device):
-                device.reset()
-                _log_event('DEVICE_RESET')
-                time.sleep(1)
+        if not _do_transfer(device, 'OUT', bm_request_type, b_request, w_value, w_index, size):
+            _check_and_reset(device)
+        if not _do_transfer(device, 'IN ', bm_request_type, b_request, w_value, w_index, size):
+            _check_and_reset(device)
 
 
 def parse_args():
@@ -252,12 +266,12 @@ def iter_params(args):
 
     Enumerates the full parameter space defined by the CLI ranges:
 
-    * **bRequest** — the standard request code or any vendor / class
+    * **bRequest** -- the standard request code or any vendor / class
       code  (USB 2.0 Specification, Section 9.3.2, Table 9-4).
-    * **wValue** — request-specific parameter (USB 2.0 Specification, Section 9.3.3).
-    * **wIndex** — typically an interface or endpoint index
+    * **wValue** -- request-specific parameter (USB 2.0 Specification, Section 9.3.3).
+    * **wIndex** -- typically an interface or endpoint index
       (USB 2.0 Specification, Section 9.3.4, Figures 9-2 / 9-3).
-    * **bmRequestType** — the Type (D6..5: Standard / Class / Vendor /
+    * **bmRequestType** -- the Type (D6..5: Standard / Class / Vendor /
       Reserved) and Recipient (D4..0: Device / Interface / Endpoint /
       Other / Reserved) sub-fields are iterated independently
       (USB 2.0 Specification, Section 9.3.1, Table 9-2).  The Direction bit (D7)
@@ -277,7 +291,7 @@ def iter_params(args):
                 for req_type in range(0x00, 0x04):
                     # bmRequestType D4..0: Recipient
                     # (0=Device, 1=Interface, 2=Endpoint, 3=Other,
-                    #  4-31=Reserved — included for completeness)
+                    #  4-31=Reserved -- included for completeness)
                     for req_recipient in range(0x00, 0x20):
                         bm_request_type = (req_type << 5) | req_recipient
                         # Skip SET_FEATURE(TEST_MODE) with conditions that actually
@@ -305,7 +319,7 @@ def iter_params(args):
 
 
 def main():
-    """Entry point — locate the target device and start fuzzing."""
+    """Entry point -- locate the target device and start fuzzing."""
     args = parse_args()
     vid_pid = args.vid_pid.split(':')
     device = usb.core.find(idVendor=int(vid_pid[0], 16), idProduct=int(vid_pid[1], 16))
@@ -314,6 +328,9 @@ def main():
         sys.exit(1)
 
     print CSV_HEADER
+    if not is_alive(device):
+        sys.stderr.write("Device %s is not responding!\n" % args.vid_pid)
+        sys.exit(1)
     for bm_request_type, b_request, w_value, w_index in iter_params(args):
         test_ctrl_transfer(device, bm_request_type, b_request, w_value, w_index, args.fill_byte)
 
