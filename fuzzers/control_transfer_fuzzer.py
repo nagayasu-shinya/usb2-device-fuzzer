@@ -64,11 +64,11 @@ def is_alive(device):
     return True
 
 
-def _do_transfer(device, direction_label, bm_request_type, b_request, w_value, w_index, size):
+def _do_transfer(device, direction_label, bm_request_type, b_request, w_value, w_index, size, fill_byte=0xff):
     is_in = (direction_label == 'IN ')
     bm_rt = bm_request_type | DIRECTION_IN if is_in else bm_request_type & ~DIRECTION_IN
     fmt_args = (bm_rt, b_request, w_value, w_index)
-    data  = size if is_in else bytearray(b'\xff' * size)
+    data  = size if is_in else bytearray([fill_byte] * size)
 
     try:
         res = device.ctrl_transfer(bm_rt, b_request, w_value, w_index, data, timeout=250)
@@ -84,12 +84,12 @@ def _do_transfer(device, direction_label, bm_request_type, b_request, w_value, w
                 (direction_label,) + fmt_args + (e.backend_error_code, size))
 
 
-def test_ctrl_transfer(device, bm_request_type, b_request, w_value, w_index):
+def test_ctrl_transfer(device, bm_request_type, b_request, w_value, w_index, fill_byte=0xff):
     for size in FUZZ_SIZES:
         sys.stdout.write('TRY %0.2x %0.2x %0.4x %0.4x len(%0.4u)\r' % (
             bm_request_type, b_request, w_value, w_index, size))
-        _do_transfer(device, 'OUT', bm_request_type, b_request, w_value, w_index, size)
-        _do_transfer(device, 'IN ', bm_request_type, b_request, w_value, w_index, size)
+        _do_transfer(device, 'OUT', bm_request_type, b_request, w_value, w_index, size, fill_byte)
+        _do_transfer(device, 'IN ', bm_request_type, b_request, w_value, w_index, size, fill_byte)
 
         if w_index % 10 == 0:
             if not is_alive(device):
@@ -119,6 +119,9 @@ def parse_args():
     parser.add_argument('--end-w-index',     dest='end_w_index',
                         type=hex_int, default=0xFFFF, metavar='HEX',
                         help='wIndex end inclusive (default: 0xFFFF)')
+    parser.add_argument('--fill-byte',        dest='fill_byte',
+                        type=hex_int, default=0xFF, metavar='HEX',
+                        help='Byte value used to fill OUT data payloads (default: 0xFF, e.g. 00, aa, 55)')
     return parser.parse_args()
 
 
@@ -162,7 +165,7 @@ def main():
         sys.exit(1)
 
     for bm_request_type, b_request, w_value, w_index in iter_params(args):
-        test_ctrl_transfer(device, bm_request_type, b_request, w_value, w_index)
+        test_ctrl_transfer(device, bm_request_type, b_request, w_value, w_index, args.fill_byte)
 
 
 if __name__ == '__main__':
