@@ -17,7 +17,15 @@ LIBUSB_ERROR_PIPE      = -9  # STALL
 DIRECTION_OUT = 0x00
 DIRECTION_IN  = 0x80
 
-FUZZ_SIZES = (0, 10, 100, 4000)
+FUZZ_SIZES = (
+    0,      # no data stage
+    1,      # minimum transfer
+    8,      # Low Speed EP0 max packet size (bMaxPacketSize0 = 8)
+    64,     # Full/High Speed EP0 max packet size (bMaxPacketSize0 = 64)
+    255,    # uint8_t max: catches firmware that parses wLength as 8-bit
+    256,    # uint8_t overflow boundary (0x100)
+    65535,  # uint16_t max: maximum wLength value
+)
 
 
 def hex_int(value):
