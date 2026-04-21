@@ -15,4 +15,3 @@ RUN sed -i 's|http://deb.debian.org/debian|http://archive.debian.org/debian|g; \
 RUN pip install --no-cache-dir pyusb==1.1.0 scapy==2.5.0
 
 WORKDIR /app
-COPY . /app
