@@ -37,12 +37,30 @@ import time
 import usb.core
 
 # ---------------------------------------------------------------------------
-# libusb error codes (subset used for control-transfer error handling)
+# libusb error codes (complete enum libusb_error) → CSV result labels.
+# STALL is non-fatal (device simply rejected the request);
+# all others indicate a condition that may require recovery.
 # ---------------------------------------------------------------------------
-LIBUSB_ERROR_IO        = -1
-LIBUSB_ERROR_ACCESS    = -3
+LIBUSB_ERROR_LABELS = {
+      0: 'SUCCESS',        # Success (no error)
+     -1: 'IO_ERROR',       # Input/output error
+     -2: 'INVALID_PARAM',  # Invalid parameter
+     -3: 'ACCESS_DENIED',  # Access denied (insufficient permissions)
+     -4: 'NO_DEVICE',      # No such device (disconnected)
+     -5: 'NOT_FOUND',      # Entity not found
+     -6: 'BUSY',           # Resource busy
+     -7: 'TIMEOUT',        # Operation timed out
+     -8: 'OVERFLOW',       # Overflow (device offered more data than requested)
+     -9: 'STALL',          # STALL (device rejected the request)
+    -10: 'INTERRUPTED',    # System call interrupted
+    -11: 'NO_MEM',         # Insufficient memory
+    -12: 'NOT_SUPPORTED',  # Operation not supported on this platform
+    -99: 'OTHER_ERROR',    # Other/unknown error
+}
+
+# Named aliases for error codes referenced in control logic.
 LIBUSB_ERROR_NO_DEVICE = -4
-LIBUSB_ERROR_PIPE      = -9  # STALL (device rejected the request)
+LIBUSB_ERROR_ACCESS    = -3
 
 # bmRequestType bit 7 -- Data transfer direction
 # (USB 2.0 Specification, Section 9.3.1, Table 9-2)
@@ -188,12 +206,7 @@ def _do_transfer(device, direction_label, bm_request_type, b_request, w_value, w
                           'bytes_written=%d' % res)
         return True
     except usb.core.USBError as e:
-        if e.backend_error_code == LIBUSB_ERROR_PIPE:
-            result = 'STALL'
-        elif e.backend_error_code == LIBUSB_ERROR_IO:
-            result = 'IO_ERROR'
-        else:
-            result = 'ERROR'
+        result = LIBUSB_ERROR_LABELS.get(e.backend_error_code, 'ERROR(%d)' % e.backend_error_code)
         _log_transfer(direction, result, bm_rt, b_request, w_value, w_index, size,
                       'error_code=%d' % e.backend_error_code)
         return result == 'STALL'
