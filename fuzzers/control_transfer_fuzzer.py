@@ -143,13 +143,14 @@ def is_alive(device):
         # GET_STATUS (bmRequestType=0x80, bRequest=0, wValue=0, wIndex=0)
         res = device.ctrl_transfer(DIRECTION_IN, 0, 0, 0, 2)
     except usb.core.USBError as e:
+        label = LIBUSB_ERROR_LABELS.get(e.backend_error_code, 'ERROR(%d)' % e.backend_error_code)
         if e.backend_error_code == LIBUSB_ERROR_NO_DEVICE:
-            _log_event('FATAL', 'reason=device_not_found')
+            _log_event('FATAL', 'reason=%s' % label)
             sys.exit()
         if e.backend_error_code == LIBUSB_ERROR_ACCESS:
-            _log_event('FATAL', 'reason=access_denied')
+            _log_event('FATAL', 'reason=%s' % label)
             sys.exit()
-        _log_event('ALIVE_FAIL', 'error_code=%d' % e.backend_error_code)
+        _log_event('ALIVE_FAIL', 'reason=%s' % label)
         return False
 
     if len(res) != 2:
@@ -207,8 +208,7 @@ def _do_transfer(device, direction_label, bm_request_type, b_request, w_value, w
         return True
     except usb.core.USBError as e:
         result = LIBUSB_ERROR_LABELS.get(e.backend_error_code, 'ERROR(%d)' % e.backend_error_code)
-        _log_transfer(direction, result, bm_rt, b_request, w_value, w_index, size,
-                      'error_code=%d' % e.backend_error_code)
+        _log_transfer(direction, result, bm_rt, b_request, w_value, w_index, size)
         return result == 'STALL'
 
 
