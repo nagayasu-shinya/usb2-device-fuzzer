@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 
 from scapy.fields import *
 from scapy.packet import Packet, Raw, bind_layers

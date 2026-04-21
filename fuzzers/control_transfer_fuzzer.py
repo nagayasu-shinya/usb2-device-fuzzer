@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 """USB 2.0 control transfer fuzzer.
 
 Exhaustively enumerates the Setup packet parameter space of USB 2.0
